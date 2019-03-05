@@ -1,65 +1,75 @@
 alabaster==0.7.12         # via sphinx
 appdirs==1.4.3            # via black
-appnope==0.1.0            # via ipython
-arrow==0.12.1
-atomicwrites==1.2.1       # via pytest
-attrs==18.2.0             # via black, pytest
+arrow==0.13.1
+atomicwrites==1.3.0       # via pytest
+attrs==19.1.0             # via black, pytest
 babel==2.6.0              # via sphinx
 backcall==0.1.0           # via ipython
 black==18.9b0
-boto3==1.9.16
-botocore==1.12.16         # via boto3, s3transfer
-certifi==2018.8.24        # via requests
+boto3==1.9.107
+botocore==1.12.107        # via boto3, s3transfer
+cachetools==3.1.0         # via google-auth
+certifi==2018.11.29       # via requests
 chardet==3.0.4            # via requests
 click==7.0                # via black, pip-tools
-coverage==4.5.1           # via coveralls, pytest-cov
-coveralls==1.5.1
-decorator==4.3.0          # via ipython, traitlets
+coverage==4.5.2           # via coveralls, pytest-cov
+coveralls==1.6.0
+decorator==4.3.2          # via ipython, traitlets
 docopt==0.6.2             # via coveralls
 docutils==0.14            # via botocore, sphinx
-flake8==3.5.0
+entrypoints==0.3          # via flake8
+flake8==3.7.7
 funcy==1.11
-idna==2.7                 # via requests
+google-api-core[grpc]==1.8.0  # via google-cloud-pubsub
+google-auth==1.6.3        # via google-api-core
+google-cloud-pubsub==0.39.1
+googleapis-common-protos[grpc]==1.5.8  # via google-api-core, grpc-google-iam-v1
+grpc-google-iam-v1==0.11.4  # via google-cloud-pubsub
+grpcio==1.19.0            # via google-api-core, googleapis-common-protos, grpc-google-iam-v1
+idna==2.8                 # via requests
 imagesize==1.1.0          # via sphinx
 ipdb==0.11
 ipython-genutils==0.2.0   # via traitlets
-ipython==7.0.1            # via ipdb
-jedi==0.13.1              # via ipython
+ipython==7.3.0            # via ipdb
+jedi==0.13.3              # via ipython
 jinja2==2.10              # via sphinx
-jmespath==0.9.3           # via boto3, botocore
-markupsafe==1.0           # via jinja2
+jmespath==0.9.4           # via boto3, botocore
+markupsafe==1.1.1         # via jinja2
 mccabe==0.6.1             # via flake8
-more-itertools==4.3.0     # via pytest
+more-itertools==6.0.0     # via pytest
 mypy-extensions==0.4.1    # via mypy
-mypy==0.630
-packaging==18.0           # via sphinx
-parso==0.3.1              # via jedi
+mypy==0.670
+packaging==19.0           # via sphinx
+parso==0.3.4              # via jedi
 pexpect==4.6.0            # via ipython
 pickleshare==0.7.5        # via ipython
-pip-tools==3.0.0
-pluggy==0.7.1             # via pytest
-prompt-toolkit==2.0.5     # via ipython
+pip-tools==3.4.0
+pluggy==0.9.0             # via pytest
+prompt-toolkit==2.0.9     # via ipython
+protobuf==3.7.0           # via google-api-core, googleapis-common-protos
 ptyprocess==0.6.0         # via pexpect
-py==1.6.0                 # via pytest
-pycodestyle==2.3.1        # via flake8
-pyflakes==1.6.0           # via flake8
-pygments==2.2.0           # via ipython, sphinx
-pyparsing==2.2.2          # via packaging
-pytest-cov==2.6.0
+py==1.8.0                 # via pytest
+pyasn1-modules==0.2.4     # via google-auth
+pyasn1==0.4.5             # via pyasn1-modules, rsa
+pycodestyle==2.5.0        # via flake8
+pyflakes==2.1.1           # via flake8
+pygments==2.3.1           # via ipython, sphinx
+pyparsing==2.3.1          # via packaging
+pytest-cov==2.6.1
 pytest-env==0.6.2
-pytest==3.8.2             # via pytest-cov, pytest-env
-python-dateutil==2.7.3    # via arrow, botocore
-pytz==2018.5              # via babel
-requests==2.19.1          # via coveralls, sphinx
+pytest==4.3.0             # via pytest-cov, pytest-env
+python-dateutil==2.8.0    # via arrow, botocore
+pytz==2018.9              # via babel, google-api-core
+requests==2.21.0          # via coveralls, google-api-core, sphinx
 retrying==1.3.3
-s3transfer==0.1.13        # via boto3
-simplegeneric==0.8.1      # via ipython
-six==1.11.0               # via more-itertools, packaging, pip-tools, prompt-toolkit, pytest, python-dateutil, retrying, sphinx, traitlets
+rsa==4.0                  # via google-auth
+s3transfer==0.2.0         # via boto3
+six==1.12.0               # via google-api-core, google-auth, grpcio, packaging, pip-tools, prompt-toolkit, protobuf, pytest, python-dateutil, retrying, sphinx, traitlets
 snowballstemmer==1.2.1    # via sphinx
-sphinx==1.8.1
+sphinx==1.8.4
 sphinxcontrib-websupport==1.1.0  # via sphinx
 toml==0.10.0              # via black
 traitlets==4.3.2          # via ipython
-typed-ast==1.1.0          # via mypy
-urllib3==1.23             # via botocore, requests
+typed-ast==1.3.1          # via mypy
+urllib3==1.24.1           # via botocore, requests
 wcwidth==0.1.7            # via prompt-toolkit
