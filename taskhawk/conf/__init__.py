@@ -15,6 +15,13 @@ _DEFAULTS = {
     'AWS_SECRET_KEY': None,
     'AWS_SESSION_TOKEN': None,
     'IS_LAMBDA_APP': False,
+    'GOOGLE_APPLICATION_CREDENTIALS': None,
+    'GOOGLE_PUBSUB_PROJECT_ID': None,
+    'GOOGLE_SUB_READ_TIMEOUT_S': 5,
+    # TODO: POC only, change TASKHAWK_PUBLISHER_BACKEND=None and TASKHAWK_CONSUMER_BACKEND=None
+    #  to be configured explicitly
+    'TASKHAWK_PUBLISHER_BACKEND': 'taskhawk.backends.publisher.GooglePubSubPublisherBackend',
+    'TASKHAWK_CONSUMER_BACKEND': 'taskhawk.backends.consumer.GooglePubSubConsumerBackend',
     'TASKHAWK_DEFAULT_HEADERS': 'taskhawk.conf.default_headers_hook',
     'TASKHAWK_PRE_PROCESS_HOOK': 'taskhawk.conf.noop_hook',
     'TASKHAWK_POST_PROCESS_HOOK': 'taskhawk.conf.noop_hook',

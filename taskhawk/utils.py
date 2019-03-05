@@ -1,7 +1,6 @@
 import boto3
 
 from taskhawk.conf import settings
-from taskhawk.consumer import get_queue_name
 from taskhawk.models import Priority
 
 
@@ -33,3 +32,14 @@ def extend_visibility_timeout(priority: Priority, receipt: str, visibility_timeo
     queue_url = _get_queue_url(client, queue_name)
 
     client.change_message_visibility(QueueUrl=queue_url, ReceiptHandle=receipt, VisibilityTimeout=visibility_timeout_s)
+
+
+def get_queue_name(priority: Priority) -> str:
+    name = f'TASKHAWK-{settings.TASKHAWK_QUEUE.upper()}'
+    if priority is Priority.high:
+        name += '-HIGH-PRIORITY'
+    elif priority is Priority.low:
+        name += '-LOW-PRIORITY'
+    elif priority is Priority.bulk:
+        name += '-BULK'
+    return name

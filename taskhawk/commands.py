@@ -3,9 +3,10 @@ import logging
 
 import funcy
 
+from taskhawk.backends.consumer import AwsSQSConsumerBackend
 from taskhawk.conf import settings
-from taskhawk.consumer import get_queue_name, get_queue, get_queue_messages
 from taskhawk import Priority
+from taskhawk.utils import get_queue_name
 
 
 class PartialFailure(Exception):
@@ -37,9 +38,9 @@ def _enqueue_messages(queue, queue_messages) -> None:
         raise PartialFailure(result)
 
 
-def get_dead_letter_queue(queue):
+def get_dead_letter_queue(sqs_consumer_backend, queue):
     queue_name = json.loads(queue.attributes['RedrivePolicy'])['deadLetterTargetArn'].split(':')[-1]
-    return get_queue(queue_name)
+    return sqs_consumer_backend.get_queue_by_name(queue_name)
 
 
 def requeue_dead_letter(priority: Priority, num_messages: int = 10, visibility_timeout: int = None) -> None:
@@ -55,13 +56,15 @@ def requeue_dead_letter(priority: Priority, num_messages: int = 10, visibility_t
         logging.warning("Not supported for Lambda apps")
         return
 
-    queue = get_queue(get_queue_name(priority))
+    sqs_consumer_backend = AwsSQSConsumerBackend()
+    queue_name = get_queue_name(priority)
+    queue = sqs_consumer_backend.get_queue_by_name(queue_name)
 
-    dead_letter_queue = get_dead_letter_queue(queue)
+    dead_letter_queue = get_dead_letter_queue(sqs_consumer_backend, queue)
 
     logging.info("Re-queueing messages from {} to {}".format(dead_letter_queue.url, queue.url))
     while True:
-        queue_messages = get_queue_messages(
+        queue_messages = sqs_consumer_backend.get_queue_messages(
             dead_letter_queue, num_messages=num_messages, visibility_timeout=visibility_timeout
         )
         if not queue_messages:
