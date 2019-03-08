@@ -8,8 +8,8 @@ from retrying import retry
 
 from taskhawk import Message, Priority
 from taskhawk.backends.base import log_published_message, TaskhawkPublisherBaseBackend
+from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
-from taskhawk.utils import get_queue_name
 
 
 class AwsSQSPublisherBackend(TaskhawkPublisherBaseBackend):

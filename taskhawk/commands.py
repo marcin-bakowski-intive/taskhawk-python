@@ -4,9 +4,9 @@ import logging
 import funcy
 
 from taskhawk.backends.consumer import AwsSQSConsumerBackend
+from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
 from taskhawk import Priority
-from taskhawk.utils import get_queue_name
 
 
 class PartialFailure(Exception):

@@ -4,9 +4,10 @@ import boto3
 from google.api_core.exceptions import NotFound, DeadlineExceeded
 from google.cloud import pubsub_v1
 
+from taskhawk import Priority
 from taskhawk.backends.base import TaskhawkConsumerBaseBackend
+from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +51,21 @@ class AwsSQSConsumerBackend(TaskhawkConsumerBaseBackend):
     def process_message(self, queue_message, **kwargs) -> None:
         message_json = queue_message.body
         receipt = queue_message.receipt_handle
-        self.message_handler(message_json, receipt)
+        self.message_handler(message_json, receipt=receipt)
 
     def delete_message(self, queue_message, **kwargs) -> None:
         queue_message.delete()
+
+    def extend_visibility_timeout(self, priority: Priority, visibility_timeout_s: int, **metadata) -> None:
+        """
+        Extends visibility timeout of a message on a given priority queue for long running tasks.
+        """
+        receipt = metadata['receipt']
+        queue_name = get_queue_name(priority)
+        queue_url = self.sqs.get_queue_url(QueueName=queue_name)['QueueUrl']
+        self.sqs.change_message_visibility(
+            QueueUrl=queue_url, ReceiptHandle=receipt, VisibilityTimeout=visibility_timeout_s
+        )
 
     @staticmethod
     def pre_process_hook_kwargs(queue_name: str, queue_message) -> dict:
@@ -74,7 +86,7 @@ class AwsSnsConsumerBackend(TaskhawkConsumerBaseBackend):
     def process_message(self, queue_message, **kwargs) -> None:
         settings.TASKHAWK_PRE_PROCESS_HOOK(sns_record=queue_message)
         message_json = queue_message['Sns']['Message']
-        self.message_handler(message_json, None)
+        self.message_handler(message_json)
         settings.TASKHAWK_POST_PROCESS_HOOK(sns_record=queue_message)
 
     def delete_message(self, queue_message, **kwargs) -> None:
@@ -103,17 +115,14 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
 
         try:
             return self.subscriber.pull(
-                subscription_path,
-                num_messages,
-                retry=None,
-                timeout=settings.GOOGLE_SUB_READ_TIMEOUT_S,
+                subscription_path, num_messages, retry=None, timeout=settings.GOOGLE_SUB_READ_TIMEOUT_S
             ).received_messages
         except DeadlineExceeded:
             logger.debug(f"Pulling deadline exceeded subscription={subscription_path}")
             return []
 
     def process_message(self, queue_message, **kwargs) -> None:
-        self.message_handler(queue_message.message.data.decode(), None)
+        self.message_handler(queue_message.message.data.decode(), ack_id=queue_message.ack_id)
 
     def delete_message(self, queue_message, **kwargs) -> None:
         subscription_path = self._get_subsciption_path(kwargs['queue_name'])
@@ -122,6 +131,17 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
     @staticmethod
     def process_hook_kwargs(queue_name: str, queue_message) -> dict:
         return {"queue_name": queue_name}
+
+    def extend_visibility_timeout(self, priority: Priority, visibility_timeout_s: int, **metadata) -> None:
+        """
+        Extends visibility timeout of a message on a given priority queue for long running tasks.
+        """
+        if visibility_timeout_s < 0 or visibility_timeout_s > 600:
+            raise ValueError("Invalid visibility_timeout_s")
+        ack_id = metadata['ack_id']
+        queue_name = get_queue_name(priority)
+        subscription = self._get_subsciption_path(queue_name)
+        self.subscriber.modify_ack_deadline(subscription, [ack_id], visibility_timeout_s)
 
 
 def get_consumer_backend():

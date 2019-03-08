@@ -108,11 +108,11 @@ class Message:
             }
         )
 
-    def call_task(self, receipt: typing.Optional[str]) -> None:
+    def call_task(self, consumer_backend, **metadata) -> None:
         """
         Call the task with this message
         """
-        self.task.call(self, receipt)
+        self.task.call(self, consumer_backend, **metadata)
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, self.__class__):

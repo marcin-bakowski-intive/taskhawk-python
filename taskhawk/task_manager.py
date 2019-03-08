@@ -206,22 +206,24 @@ class Task:
         """
         AsyncInvocation(self).dispatch(*args, **kwargs)
 
-    def call(self, message: 'Message', receipt: typing.Optional[str]) -> None:
+    def call(self, message: 'Message', consumer_backend, **metadata: typing.Optional[typing.Mapping]) -> None:
         """
         Calls the task with this message
         :param message: The message
-        :param receipt: SQS receipt. May be `None` for Lambda consumers.
+        :param consumer_backend: taskhawk consumer backend instance
+        :param metadata: consumer specific options
         """
         args = copy.deepcopy(message.args)
         kwargs = copy.deepcopy(message.kwargs)
         if self.accepts_metadata:
-            kwargs['metadata'] = {
-                'id': message.id,
-                'timestamp': message.timestamp,
-                'version': message.version,
-                'receipt': receipt,
-                'priority': message.priority,
-            }
+            kwargs['metadata'] = dict(
+                id=message.id,
+                timestamp=message.timestamp,
+                version=message.version,
+                priority=message.priority,
+                consumer_backend=consumer_backend,
+                **metadata,
+            )
         if self.accepts_headers:
             kwargs['headers'] = copy.deepcopy(message.headers)
         self.fn(*args, **kwargs)

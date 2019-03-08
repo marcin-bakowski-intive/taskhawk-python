@@ -1,14 +1,13 @@
 import importlib
 import json
 import logging
-import typing
 from decimal import Decimal
 
 from taskhawk import Priority, Message
+from taskhawk.backends.utils import get_queue_name
 from taskhawk.exceptions import ValidationError, IgnoreException, LoggingException, RetryException
 
 from taskhawk.conf import settings
-from taskhawk.utils import get_queue_name
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +56,7 @@ class TaskhawkConsumerBaseBackend(TaskhawkBaseBackend):
     def post_process_hook_kwargs(queue_name: str, queue_message) -> dict:
         return {}
 
-    @staticmethod
-    def message_handler(message_json: str, receipt: typing.Optional[str]) -> None:
+    def message_handler(self, message_json: str, **metadata) -> None:
         try:
             message_body = json.loads(message_json)
             message = Message(message_body)
@@ -69,7 +67,7 @@ class TaskhawkConsumerBaseBackend(TaskhawkBaseBackend):
         _log_received_message(message_body)
 
         try:
-            message.call_task(receipt)
+            message.call_task(self, **metadata)
         except IgnoreException:
             logger.info(f'Ignoring task {message.id}')
             return
@@ -109,6 +107,12 @@ class TaskhawkConsumerBaseBackend(TaskhawkBaseBackend):
             except Exception:
                 # already logged in message_handler
                 pass
+
+    def extend_visibility_timeout(self, priority: Priority, visibility_timeout_s: int, **metadata) -> None:
+        """
+        Extends visibility timeout of a message on a given priority queue for long running tasks.
+        """
+        logger.debug("Nothing to do. Backend must provide its own extend_visibility_timeout() implementation")
 
     def pull_messages(self, queue_name: str, num_messages: int = 1, visibility_timeout: int = None):
         raise NotImplementedError
