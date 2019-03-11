@@ -1,13 +1,11 @@
-import importlib
 import json
 import logging
 from decimal import Decimal
 
 from taskhawk import Priority, Message
-from taskhawk.backends.utils import get_queue_name
-from taskhawk.exceptions import ValidationError, IgnoreException, LoggingException, RetryException
-
+from taskhawk.backends.utils import get_queue_name, import_class
 from taskhawk.conf import settings
+from taskhawk.exceptions import ValidationError, IgnoreException, LoggingException, RetryException
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +17,8 @@ class TaskhawkBaseBackend:
         Import a dotted module path and return the backend class instance.
         Raise ImportError if the import failed.
         """
-        if not dotted_path:
-            raise ImportError(f"{dotted_path} is not defined")
-        try:
-            module_path, class_name = dotted_path.rsplit('.', 1)
-        except ValueError as err:
-            raise ImportError(f"{dotted_path} doesn't look like a module path") from err
-
-        module = importlib.import_module(module_path)
-
-        try:
-            return getattr(module, class_name)()
-        except AttributeError as err:
-            raise ImportError(f"Module '{module_path}' does not define a '{class_name}' attribute/class") from err
+        backend_cls = import_class(dotted_path)
+        return backend_cls()
 
     @staticmethod
     def message_payload(data: dict) -> str:
@@ -57,14 +44,8 @@ class TaskhawkConsumerBaseBackend(TaskhawkBaseBackend):
         return {}
 
     def message_handler(self, message_json: str, **metadata) -> None:
-        try:
-            message_body = json.loads(message_json)
-            message = Message(message_body)
-        except (ValidationError, ValueError):
-            _log_invalid_message(message_json)
-            raise
-
-        _log_received_message(message_body)
+        message = self._build_message(message_json)
+        _log_received_message(message.as_dict())
 
         try:
             message.call_task(self, **metadata)
@@ -123,6 +104,14 @@ class TaskhawkConsumerBaseBackend(TaskhawkBaseBackend):
     def delete_message(self, queue_message, **kwargs) -> None:
         raise NotImplementedError
 
+    @staticmethod
+    def _build_message(message_json: str) -> Message:
+        try:
+            return Message(json.loads(message_json))
+        except (ValidationError, ValueError):
+            _log_invalid_message(message_json)
+            raise
+
 
 def _decimal_json_default(obj):
     if isinstance(obj, Decimal):
@@ -144,3 +133,11 @@ def _log_received_message(message_body: dict) -> None:
 
 def _log_invalid_message(message_json: str) -> None:
     logger.error('Received invalid message', extra={'message_json': message_json})
+
+
+def get_publisher_backend():
+    return TaskhawkPublisherBaseBackend.build(settings.TASKHAWK_PUBLISHER_BACKEND)
+
+
+def get_consumer_backend():
+    return TaskhawkConsumerBaseBackend.build(settings.TASKHAWK_CONSUMER_BACKEND)

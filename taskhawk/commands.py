@@ -3,7 +3,7 @@ import logging
 
 import funcy
 
-from taskhawk.backends.consumer import AwsSQSConsumerBackend
+from taskhawk.backends.aws import AwsSQSConsumerBackend
 from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
 from taskhawk import Priority

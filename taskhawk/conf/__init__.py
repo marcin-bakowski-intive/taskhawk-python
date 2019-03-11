@@ -18,10 +18,13 @@ _DEFAULTS = {
     'GOOGLE_APPLICATION_CREDENTIALS': None,
     'GOOGLE_PUBSUB_PROJECT_ID': None,
     'GOOGLE_SUB_READ_TIMEOUT_S': 5,
+    'GOOGLE_MESSAGE_RETRY_STATE_BACKEND': 'taskhawk.backends.google_cloud.MessageRetryStateRedis',
+    'GOOGLE_MESSAGE_RETRY_STATE_REDIS_URL': 'redis://localhost:6379/10',
+    'GOOGLE_MESSAGE_MAX_RETRIES': 3,
     # TODO: POC only, change TASKHAWK_PUBLISHER_BACKEND=None and TASKHAWK_CONSUMER_BACKEND=None
     #  to be configured explicitly
-    'TASKHAWK_PUBLISHER_BACKEND': 'taskhawk.backends.publisher.GooglePubSubPublisherBackend',
-    'TASKHAWK_CONSUMER_BACKEND': 'taskhawk.backends.consumer.GooglePubSubConsumerBackend',
+    'TASKHAWK_PUBLISHER_BACKEND': 'taskhawk.backends.google_cloud.GooglePubSubPublisherBackend',
+    'TASKHAWK_CONSUMER_BACKEND': 'taskhawk.backends.google_cloud.GooglePubSubConsumerBackend',
     'TASKHAWK_DEFAULT_HEADERS': 'taskhawk.conf.default_headers_hook',
     'TASKHAWK_PRE_PROCESS_HOOK': 'taskhawk.conf.noop_hook',
     'TASKHAWK_POST_PROCESS_HOOK': 'taskhawk.conf.noop_hook',

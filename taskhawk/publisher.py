@@ -1,5 +1,4 @@
-from taskhawk.backends.base import TaskhawkPublisherBaseBackend
-from taskhawk.backends.publisher import get_publisher_backend
+from taskhawk.backends.base import TaskhawkPublisherBaseBackend, get_publisher_backend
 from taskhawk.models import Message
 
 

@@ -1,4 +1,4 @@
-from taskhawk.backends.consumer import AwsSQSConsumerBackend
+from taskhawk.backends.aws import AwsSQSConsumerBackend
 from taskhawk.models import Priority
 
 

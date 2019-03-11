@@ -2,7 +2,8 @@ import itertools
 import threading
 
 from taskhawk import Priority
-from taskhawk.backends.consumer import get_consumer_backend, AwsSnsConsumerBackend
+from taskhawk.backends.aws import AwsSnsConsumerBackend
+from taskhawk.backends.base import get_consumer_backend
 
 
 def process_messages_for_lambda_consumer(lambda_event: dict) -> None:

@@ -12,3 +12,11 @@ def echo_with_extended_visibility_timeout(message, timeout, metadata=None):
     priority = metadata.pop("priority")
     consumer_backend.extend_visibility_timeout(priority, timeout, **metadata)
     print("Echo '%s'" % message)
+
+
+@taskhawk.task
+def echo_error(message):
+    print("Echo '%s'" % message)
+
+    if "error" in message.lower():
+        raise Exception

@@ -1,15 +1,83 @@
 import logging
 
 import boto3
-from google.api_core.exceptions import NotFound, DeadlineExceeded
-from google.cloud import pubsub_v1
+from botocore.config import Config
+from retrying import retry
 
-from taskhawk import Priority
-from taskhawk.backends.base import TaskhawkConsumerBaseBackend
+from taskhawk import Priority, Message
+from taskhawk.backends.base import TaskhawkConsumerBaseBackend, log_published_message, TaskhawkPublisherBaseBackend
 from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+class AwsSQSPublisherBackend(TaskhawkPublisherBaseBackend):
+    WAIT_TIME_SECONDS = 20
+
+    def __init__(self):
+        self.sqs = boto3.resource(
+            'sqs',
+            region_name=settings.AWS_REGION,
+            aws_access_key_id=settings.AWS_ACCESS_KEY,
+            aws_secret_access_key=settings.AWS_SECRET_KEY,
+            aws_session_token=settings.AWS_SESSION_TOKEN,
+            endpoint_url=settings.AWS_ENDPOINT_SQS,
+        )
+
+    @staticmethod
+    @retry(stop_max_attempt_number=3, stop_max_delay=3000)
+    def _publish_over_sqs(queue, message_json: str, message_attributes: dict) -> dict:
+        # transform (http://boto3.readthedocs.io/en/latest/reference/services/sqs.html#SQS.Client.send_message)
+        message_attributes = {k: {'DataType': 'String', 'StringValue': str(v)} for k, v in message_attributes.items()}
+        return queue.send_message(MessageBody=message_json, MessageAttributes=message_attributes)
+
+    def publish(self, message: Message) -> None:
+        queue_name = get_queue_name(message.priority)
+        queue = self.sqs.get_queue_by_name(QueueName=queue_name)
+
+        message_body = message.as_dict()
+        self._publish_over_sqs(queue, self.message_payload(message_body), message.headers)
+        log_published_message(message_body)
+
+
+class AwsSnsPublisherBackend(TaskhawkPublisherBaseBackend):
+    def __init__(self):
+        config = Config(connect_timeout=settings.AWS_CONNECT_TIMEOUT_S, read_timeout=settings.AWS_READ_TIMEOUT_S)
+        self.sns_client = boto3.client(
+            'sns',
+            region_name=settings.AWS_REGION,
+            aws_access_key_id=settings.AWS_ACCESS_KEY,
+            aws_secret_access_key=settings.AWS_SECRET_KEY,
+            aws_session_token=settings.AWS_SESSION_TOKEN,
+            endpoint_url=settings.AWS_ENDPOINT_SNS,
+            config=config,
+        )
+
+    @staticmethod
+    def _get_sns_topic(priority: Priority) -> str:
+        topic = (
+            f'arn:aws:sns:{settings.AWS_REGION}:{settings.AWS_ACCOUNT_ID}:taskhawk-{settings.TASKHAWK_QUEUE.lower()}'
+        )
+        if priority == Priority.high:
+            topic += '-high-priority'
+        elif priority == Priority.low:
+            topic += '-low-priority'
+        elif priority == Priority.bulk:
+            topic += '-bulk'
+        return topic
+
+    @retry(stop_max_attempt_number=3, stop_max_delay=3000)
+    def _publish_over_sns(self, topic: str, message_json: str, message_attributes: dict) -> None:
+        # transform (http://boto.cloudhackers.com/en/latest/ref/sns.html#boto.sns.SNSConnection.publish)
+        message_attributes = {k: {'DataType': 'String', 'StringValue': str(v)} for k, v in message_attributes.items()}
+        self.sns_client.publish(TopicArn=topic, Message=message_json, MessageAttributes=message_attributes)
+
+    def publish(self, message: Message) -> None:
+        message_body = message.as_dict()
+        topic = self._get_sns_topic(message.priority)
+        self._publish_over_sns(topic, self.message_payload(message_body), message.headers)
+        log_published_message(message_body)
 
 
 class AwsSQSConsumerBackend(TaskhawkConsumerBaseBackend):
@@ -91,58 +159,3 @@ class AwsSnsConsumerBackend(TaskhawkConsumerBaseBackend):
 
     def delete_message(self, queue_message, **kwargs) -> None:
         pass
-
-
-class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
-    def __init__(self) -> None:
-        self.subscriber = pubsub_v1.SubscriberClient.from_service_account_file(settings.GOOGLE_APPLICATION_CREDENTIALS)
-
-    def _ensure_subscription_exists(self, queue_name: str, subscription_path: str) -> None:
-        topic_path = self.subscriber.topic_path(settings.GOOGLE_PUBSUB_PROJECT_ID, queue_name)
-        try:
-            self.subscriber.get_subscription(subscription_path)
-        except NotFound:
-            self.subscriber.create_subscription(subscription_path, topic_path)
-
-    def _get_subsciption_path(self, queue_name):
-        return self.subscriber.subscription_path(settings.GOOGLE_PUBSUB_PROJECT_ID, queue_name)
-
-    def pull_messages(self, queue_name: str, num_messages: int = 1, visibility_timeout: int = None):
-        subscription_path = self._get_subsciption_path(queue_name)
-
-        # TODO: POC only, remove subscription auto-creation code
-        self._ensure_subscription_exists(queue_name, subscription_path)
-
-        try:
-            return self.subscriber.pull(
-                subscription_path, num_messages, retry=None, timeout=settings.GOOGLE_SUB_READ_TIMEOUT_S
-            ).received_messages
-        except DeadlineExceeded:
-            logger.debug(f"Pulling deadline exceeded subscription={subscription_path}")
-            return []
-
-    def process_message(self, queue_message, **kwargs) -> None:
-        self.message_handler(queue_message.message.data.decode(), ack_id=queue_message.ack_id)
-
-    def delete_message(self, queue_message, **kwargs) -> None:
-        subscription_path = self._get_subsciption_path(kwargs['queue_name'])
-        self.subscriber.acknowledge(subscription_path, [queue_message.ack_id])
-
-    @staticmethod
-    def process_hook_kwargs(queue_name: str, queue_message) -> dict:
-        return {"queue_name": queue_name}
-
-    def extend_visibility_timeout(self, priority: Priority, visibility_timeout_s: int, **metadata) -> None:
-        """
-        Extends visibility timeout of a message on a given priority queue for long running tasks.
-        """
-        if visibility_timeout_s < 0 or visibility_timeout_s > 600:
-            raise ValueError("Invalid visibility_timeout_s")
-        ack_id = metadata['ack_id']
-        queue_name = get_queue_name(priority)
-        subscription = self._get_subsciption_path(queue_name)
-        self.subscriber.modify_ack_deadline(subscription, [ack_id], visibility_timeout_s)
-
-
-def get_consumer_backend():
-    return TaskhawkConsumerBaseBackend.build(settings.TASKHAWK_CONSUMER_BACKEND)
