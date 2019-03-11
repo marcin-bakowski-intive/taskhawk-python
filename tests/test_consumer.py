@@ -1,31 +1,22 @@
 import json
-from unittest import mock
 import uuid
+from unittest import mock
 
 import pytest
 
-from taskhawk import consumer
+from taskhawk import process_messages_for_lambda_consumer, listen_for_messages
+from taskhawk.backends import base
+from taskhawk.backends.base import get_consumer_backend
+from taskhawk.backends.google_cloud import GooglePubSubConsumerBackend
+from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
-from taskhawk.consumer import (
-    fetch_and_process_messages,
-    get_queue_name,
-    message_handler,
-    listen_for_messages,
-    message_handler_lambda,
-    process_messages_for_lambda_consumer,
-    message_handler_sqs,
-    get_queue,
-    get_queue_messages,
-    WAIT_TIME_SECONDS,
-    _get_sqs_resource,
-)
-from taskhawk.models import Priority
 from taskhawk.exceptions import RetryException, ValidationError, LoggingException, IgnoreException
+from taskhawk.models import Priority
 
 
-@mock.patch('taskhawk.consumer.boto3.resource', autospec=True)
+@mock.patch('taskhawk.backends.aws.boto3.resource', autospec=True)
 def test__get_sqs_resource(mock_boto3_resource):
-    resource = _get_sqs_resource()
+    sqs_backend = get_consumer_backend()
     mock_boto3_resource.assert_called_once_with(
         'sqs',
         region_name=settings.AWS_REGION,
@@ -34,91 +25,96 @@ def test__get_sqs_resource(mock_boto3_resource):
         aws_session_token=settings.AWS_SESSION_TOKEN,
         endpoint_url=settings.AWS_ENDPOINT_SQS,
     )
-    assert resource == mock_boto3_resource.return_value
+    assert sqs_backend.sqs == mock_boto3_resource.return_value
 
 
-@mock.patch('taskhawk.consumer._get_sqs_resource', autospec=True)
+@mock.patch('taskhawk.backends.aws.boto3.resource', autospec=True)
 def test_get_queue(mock_get_sqs_resource):
     queue_name = 'foo'
-    assert mock_get_sqs_resource.return_value.get_queue_by_name.return_value == get_queue(queue_name)
-    mock_get_sqs_resource.assert_called_once_with()
+    mock_get_sqs_resource.return_value.get_queue_by_name.return_value = 'foo-bar'
+    sqs_backend = get_consumer_backend()
+
+    sqs_backend.get_queue_by_name(queue_name)
     mock_get_sqs_resource.return_value.get_queue_by_name.assert_called_once_with(QueueName=queue_name)
 
 
-@mock.patch('taskhawk.consumer.Message.call_task', autospec=True)
+@mock.patch('taskhawk.backends.base.Message.call_task', autospec=True)
 class TestMessageHandler:
-    def test_success(self, mock_call_task, message_data, message):
+    def test_success(self, mock_call_task, message_data, message, consumer_backend):
         receipt = str(uuid.uuid4())
-        message_handler(json.dumps(message_data), receipt)
-        mock_call_task.assert_called_once_with(message, receipt)
+        consumer_backend.message_handler(json.dumps(message_data), receipt=receipt)
+        mock_call_task.assert_called_once_with(message, consumer_backend, receipt=receipt)
 
-    def test_fails_on_invalid_json(self, *mocks):
+    def test_fails_on_invalid_json(self, mock_call_task, consumer_backend):
         with pytest.raises(ValueError):
-            message_handler("bad json", None)
+            consumer_backend.message_handler("bad json")
 
-    @mock.patch('taskhawk.consumer.Message.validate', autospec=True)
-    def test_fails_on_validation_error(self, mock_validate, mock_call_task, message_data):
+    @mock.patch('taskhawk.backends.base.Message.validate', autospec=True)
+    def test_fails_on_validation_error(self, mock_validate, mock_call_task, message_data, consumer_backend):
         error_message = 'Invalid message body'
         mock_validate.side_effect = ValidationError(error_message)
         with pytest.raises(ValidationError):
-            message_handler(json.dumps(message_data), None)
+            consumer_backend.message_handler(json.dumps(message_data))
         mock_call_task.assert_not_called()
 
-    def test_fails_on_task_failure(self, mock_call_task, message_data, message):
+    def test_fails_on_task_failure(self, mock_call_task, message_data, message, consumer_backend):
         mock_call_task.side_effect = Exception
         with pytest.raises(mock_call_task.side_effect):
-            message_handler(json.dumps(message_data), None)
+            consumer_backend.message_handler(json.dumps(message_data))
 
-    def test_special_handling_logging_error(self, mock_call_task, message_data, message):
+    def test_special_handling_logging_error(self, mock_call_task, message_data, message, consumer_backend):
         mock_call_task.side_effect = LoggingException('foo', extra={'mickey': 'mouse'})
-        with pytest.raises(LoggingException), mock.patch.object(consumer.logger, 'exception') as logging_mock:
-            message_handler(json.dumps(message_data), None)
+        with pytest.raises(LoggingException), mock.patch.object(base.logger, 'exception') as logging_mock:
+            consumer_backend.message_handler(json.dumps(message_data))
 
             logging_mock.assert_called_once_with('foo', extra={'mickey': 'mouse'})
 
-    def test_special_handling_retry_error(self, mock_call_task, message_data, message):
+    def test_special_handling_retry_error(self, mock_call_task, message_data, message, consumer_backend):
 
         mock_call_task.side_effect = RetryException
-        with pytest.raises(mock_call_task.side_effect), mock.patch.object(consumer.logger, 'info') as logging_mock:
-            message_handler(json.dumps(message_data), None)
+        with pytest.raises(mock_call_task.side_effect), mock.patch.object(base.logger, 'info') as logging_mock:
+            consumer_backend.message_handler(json.dumps(message_data))
 
             logging_mock.assert_called_once()
 
-    def test_special_handling_ignore_exception(self, mock_call_task, message_data, message):
+    def test_special_handling_ignore_exception(self, mock_call_task, message_data, message, consumer_backend):
         mock_call_task.side_effect = IgnoreException
         # no exception raised
-        with mock.patch.object(consumer.logger, 'info') as logging_mock:
-            message_handler(json.dumps(message_data), None)
+        with mock.patch.object(base.logger, 'info') as logging_mock:
+            consumer_backend.message_handler(json.dumps(message_data))
 
             logging_mock.assert_called_once()
 
 
-@mock.patch('taskhawk.consumer.message_handler', autospec=True)
-def test_message_handler_sqs(mock_message_handler):
+def test_message_handler_sqs(sqs_consumer_backend):
     queue_message = mock.MagicMock()
-    message_handler_sqs(queue_message)
+    sqs_consumer_backend.message_handler = mock.MagicMock()
 
-    mock_message_handler.assert_called_once_with(queue_message.body, queue_message.receipt_handle)
+    sqs_consumer_backend.process_message(queue_message)
+
+    sqs_consumer_backend.message_handler.assert_called_once_with(
+        queue_message.body, receipt=queue_message.receipt_handle
+    )
 
 
-@mock.patch('taskhawk.consumer.message_handler', autospec=True)
-def test_message_handler_lambda(mock_message_handler):
+def test_message_handler_lambda(sns_consumer_backend):
     lambda_event = mock.MagicMock()
-    message_handler_lambda(lambda_event)
+    sns_consumer_backend.message_handler = mock.MagicMock()
+    sns_consumer_backend.process_message(lambda_event)
 
-    mock_message_handler.assert_called_once_with(lambda_event['Sns']['Message'], None)
+    sns_consumer_backend.message_handler.assert_called_once_with(lambda_event['Sns']['Message'])
 
 
-def test_get_queue_messages():
+def test_get_queue_messages(sqs_consumer_backend):
     queue = mock.MagicMock()
     num_messages = 2
     visibility_timeout = 100
 
-    messages = get_queue_messages(queue, num_messages, visibility_timeout)
+    messages = sqs_consumer_backend.get_queue_messages(queue, num_messages, visibility_timeout)
 
     queue.receive_messages.assert_called_once_with(
         MaxNumberOfMessages=num_messages,
-        WaitTimeSeconds=WAIT_TIME_SECONDS,
+        WaitTimeSeconds=sqs_consumer_backend.WAIT_TIME_SECONDS,
         MessageAttributeNames=['All'],
         VisibilityTimeout=visibility_timeout,
     )
@@ -142,93 +138,108 @@ pre_process_hook = mock.MagicMock()
 post_process_hook = mock.MagicMock()
 
 
-@mock.patch('taskhawk.consumer.get_queue_messages', autospec=True)
-@mock.patch('taskhawk.consumer.message_handler_sqs', autospec=True)
 class TestFetchAndProcessMessages:
-    def test_success(self, mock_message_handler, mock_get_messages):
-        queue_name = 'my-queue'
-        queue = mock.MagicMock()
+    def test_success(self, consumer_backend):
+        priority = Priority.default
+        queue_name = get_queue_name(priority)
         num_messages = 3
         visibility_timeout = 4
 
-        mock_get_messages.return_value = [mock.MagicMock(), mock.MagicMock()]
+        consumer_backend.pull_messages = mock.MagicMock()
+        consumer_backend.pull_messages.return_value = [mock.MagicMock(), mock.MagicMock()]
+        consumer_backend.process_message = mock.MagicMock()
+        consumer_backend.delete_message = mock.MagicMock()
 
-        fetch_and_process_messages(queue_name, queue, num_messages, visibility_timeout)
+        consumer_backend.fetch_and_process_messages(priority, num_messages, visibility_timeout)
 
-        mock_get_messages.assert_called_once_with(queue, num_messages, visibility_timeout=visibility_timeout)
-        mock_message_handler.assert_has_calls([mock.call(x) for x in mock_get_messages.return_value])
-        for message in mock_get_messages.return_value:
-            message.delete.assert_called_once_with()
+        consumer_backend.pull_messages.assert_called_once_with(queue_name, num_messages, visibility_timeout)
+        consumer_backend.process_message.assert_has_calls(
+            [
+                mock.call(x, **consumer_backend.process_hook_kwargs(queue_name, x))
+                for x in consumer_backend.pull_messages.return_value
+            ]
+        )
+        consumer_backend.delete_message.assert_has_calls(
+            [
+                mock.call(x, **consumer_backend.process_hook_kwargs(queue_name, x))
+                for x in consumer_backend.pull_messages.return_value
+            ]
+        )
 
-    def test_preserves_messages(self, mock_message_handler, mock_get_messages):
-        queue_name = 'my-queue'
-        queue = mock.MagicMock()
+    def test_preserves_messages(self, consumer_backend):
+        consumer_backend.pull_messages = mock.MagicMock()
+        consumer_backend.pull_messages.return_value = [mock.MagicMock()]
+        consumer_backend.process_message = mock.MagicMock()
+        consumer_backend.process_message.side_effect = Exception
 
-        mock_get_messages.return_value = [mock.MagicMock()]
-        mock_message_handler.side_effect = Exception
+        consumer_backend.fetch_and_process_messages(Priority.default)
 
-        fetch_and_process_messages(queue_name, queue)
+        consumer_backend.pull_messages.return_value[0].delete.assert_not_called()
 
-        mock_get_messages.return_value[0].delete.assert_not_called()
+    def test_ignore_delete_error(self, consumer_backend):
+        queue_name = get_queue_name(Priority.default)
+        queue_message = mock.MagicMock()
+        process_hook_kwargs = consumer_backend.process_hook_kwargs(queue_name, queue_message)
+        consumer_backend.pull_messages = mock.MagicMock(return_value=[queue_message])
+        consumer_backend.process_message = mock.MagicMock()
+        consumer_backend.delete_message = mock.MagicMock(side_effect=Exception)
 
-    def test_ignore_delete_error(self, mock_message_handler, mock_get_messages):
-        queue_name = 'my-queue'
-        queue = mock.MagicMock()
-
-        mock_get_messages.return_value = [mock.MagicMock()]
-        mock_get_messages.return_value[0].delete.side_effect = Exception
-
-        with mock.patch.object(consumer.logger, 'exception') as logging_mock:
-            fetch_and_process_messages(queue_name, queue)
+        with mock.patch.object(base.logger, 'exception') as logging_mock:
+            consumer_backend.fetch_and_process_messages(Priority.default)
 
             logging_mock.assert_called_once()
 
-        mock_get_messages.return_value[0].delete.assert_called_once_with()
+        consumer_backend.delete_message.assert_called_once_with(
+            consumer_backend.pull_messages.return_value[0], **process_hook_kwargs
+        )
 
-    def test_pre_process_hook(self, mock_message_handler, mock_get_messages, settings):
-        queue_name = 'my-queue'
-        queue = mock.MagicMock()
+    def test_pre_process_hook(self, consumer_backend, settings):
+        pre_process_hook.reset_mock()
+        queue_name = get_queue_name(Priority.default)
         settings.TASKHAWK_PRE_PROCESS_HOOK = 'tests.test_consumer.pre_process_hook'
+        consumer_backend.pull_messages = mock.MagicMock(return_value=[mock.MagicMock(), mock.MagicMock()])
 
-        mock_get_messages.return_value = [mock.MagicMock(), mock.MagicMock()]
-
-        fetch_and_process_messages(queue_name, queue)
+        consumer_backend.fetch_and_process_messages(Priority.default)
 
         pre_process_hook.assert_has_calls(
-            [mock.call(queue_name=queue_name, sqs_queue_message=x) for x in mock_get_messages.return_value]
+            [
+                mock.call(**consumer_backend.pre_process_hook_kwargs(queue_name, x))
+                for x in consumer_backend.pull_messages.return_value
+            ]
         )
 
-    def test_post_process_hook(self, mock_message_handler, mock_get_messages, settings):
-        queue_name = 'my-queue'
-        queue = mock.MagicMock()
+    def test_post_process_hook(self, consumer_backend, settings):
+        post_process_hook.reset_mock()
+        queue_name = get_queue_name(Priority.default)
         settings.TASKHAWK_POST_PROCESS_HOOK = 'tests.test_consumer.post_process_hook'
+        consumer_backend.process_message = mock.MagicMock()
+        consumer_backend.pull_messages = mock.MagicMock(return_value=[mock.MagicMock(), mock.MagicMock()])
 
-        mock_get_messages.return_value = [mock.MagicMock(), mock.MagicMock()]
-
-        fetch_and_process_messages(queue_name, queue)
+        consumer_backend.fetch_and_process_messages(Priority.default)
 
         post_process_hook.assert_has_calls(
-            [mock.call(queue_name=queue_name, sqs_queue_message=x) for x in mock_get_messages.return_value]
+            [
+                mock.call(**consumer_backend.post_process_hook_kwargs(queue_name, x))
+                for x in consumer_backend.pull_messages.return_value
+            ]
         )
 
-    def test_post_process_hook_exception_raised(self, mock_message_handler, mock_get_messages, settings):
-        queue_name = 'my-queue'
-        queue = mock.MagicMock()
+    def test_post_process_hook_exception_raised(self, consumer_backend, settings):
+        queue_name = get_queue_name(Priority.default)
         settings.TASKHAWK_POST_PROCESS_HOOK = 'tests.test_consumer.post_process_hook'
-
+        consumer_backend.process_message = mock.MagicMock()
         mock_message = mock.MagicMock()
-        mock_get_messages.return_value = [mock_message]
-
+        consumer_backend.pull_messages = mock.MagicMock(return_value=[mock_message])
         post_process_hook.reset_mock()
         post_process_hook.side_effect = RuntimeError('fail')
 
-        fetch_and_process_messages(queue_name, queue)
+        consumer_backend.fetch_and_process_messages(Priority.default)
 
-        post_process_hook.assert_called_once_with(queue_name=queue_name, sqs_queue_message=mock_message)
+        post_process_hook.assert_called_once_with(**consumer_backend.pre_process_hook_kwargs(queue_name, mock_message))
         mock_message.delete.assert_not_called()
 
 
-@mock.patch('taskhawk.consumer.message_handler_lambda', autospec=True)
+@mock.patch('taskhawk.backends.aws.AwsSnsConsumerBackend.process_message', autospec=True)
 class TestProcessMessagesForLambdaConsumer:
     def test_success(self, mock_message_handler):
         # copy from https://docs.aws.amazon.com/lambda/latest/dg/eventsources.html#eventsources-sns
@@ -276,7 +287,7 @@ class TestProcessMessagesForLambdaConsumer:
         }
         event = {"Records": [mock_record1, mock_record2]}
         process_messages_for_lambda_consumer(event)
-        mock_message_handler.assert_has_calls([mock.call(mock_record1), mock.call(mock_record2)])
+        mock_message_handler.assert_has_calls([mock.call(mock.ANY, mock_record1), mock.call(mock.ANY, mock_record2)])
 
     def test_logs_and_preserves_message(self, mock_handler):
         event = {'Records': [mock.MagicMock()]}
@@ -285,18 +296,50 @@ class TestProcessMessagesForLambdaConsumer:
             process_messages_for_lambda_consumer(event)
 
 
-@mock.patch('taskhawk.consumer.get_queue', autospec=True)
-@mock.patch('taskhawk.consumer.fetch_and_process_messages', autospec=True)
 class TestListenForMessages:
-    def test_listen_for_messages(self, mock_fetch_and_process, mock_get_queue):
+    @mock.patch("taskhawk.consumer.get_consumer_backend")
+    def test_listen_for_messages(self, get_consumer_backend_mock, consumer_backend):
+        get_consumer_backend_mock.return_value = consumer_backend
+        consumer_backend.fetch_and_process_messages = mock.MagicMock()
         num_messages = 3
         visibility_timeout_s = 4
         loop_count = 1
 
         listen_for_messages(Priority.high, num_messages, visibility_timeout_s, loop_count)
 
-        queue_name = get_queue_name(Priority.high)
-        mock_get_queue.assert_called_once_with(queue_name)
-        mock_fetch_and_process.assert_called_once_with(
-            queue_name, mock_get_queue.return_value, num_messages=num_messages, visibility_timeout=visibility_timeout_s
+        consumer_backend.fetch_and_process_messages.assert_called_once_with(
+            Priority.high, num_messages, visibility_timeout_s
         )
+
+
+class TestGoogleConsumerDLQ:
+    def google_consumer_backend(self, max_retries):
+        settings.GOOGLE_MESSAGE_MAX_RETRIES = max_retries
+        settings.GOOGLE_MESSAGE_RETRY_STATE_BACKEND = "taskhawk.backends.google_cloud.MessageRetryStateLocMem"
+        with mock.patch("taskhawk.backends.google_cloud.pubsub_v1"):
+            return GooglePubSubConsumerBackend()
+
+    def setup_consumer_backend(self, consumer_backend, message):
+        queue_message = mock.MagicMock()
+        queue_message.message.data = json.dumps(message.as_dict()).encode("utf-8")
+        consumer_backend._move_message_to_dlq = mock.MagicMock()
+
+        consumer_backend.pull_messages = mock.MagicMock(return_value=[queue_message])
+        consumer_backend.message_handler = mock.MagicMock(side_effect=Exception)
+
+    def test_message_moved_to_dlq(self, message):
+        consumer_backend = self.google_consumer_backend(1)
+        queue_name = get_queue_name(message.priority)
+        self.setup_consumer_backend(consumer_backend, message)
+
+        consumer_backend.fetch_and_process_messages(message.priority)
+
+        consumer_backend._move_message_to_dlq.assert_called_once_with(message, queue_name)
+
+    def test_message_not_moved_to_dlq(self, message):
+        consumer_backend = self.google_consumer_backend(5)
+        self.setup_consumer_backend(consumer_backend, message)
+
+        consumer_backend.fetch_and_process_messages(message.priority)
+
+        consumer_backend._move_message_to_dlq.assert_not_called()

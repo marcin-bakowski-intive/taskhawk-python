@@ -263,7 +263,7 @@ class TestTask:
         task_obj.call(message, receipt)
         _f.assert_called_once_with(*message.args, headers=message.headers, **message.kwargs)
 
-    def test_call_metadata(self, message):
+    def test_call_metadata(self, message, sqs_consumer_backend):
         _f = mock.MagicMock()
 
         @task(name='test_call_metadata')
@@ -272,8 +272,16 @@ class TestTask:
 
         task_obj = f.task
         receipt = str(uuid.uuid4())
-        task_obj.call(message, receipt)
-        metadata = funcy.merge(message.metadata, {'id': message.id, 'receipt': receipt, 'priority': Priority.default})
+        task_obj.call(message, sqs_consumer_backend, receipt=receipt)
+        metadata = funcy.merge(
+            message.metadata,
+            {
+                'id': message.id,
+                'receipt': receipt,
+                'priority': Priority.default,
+                'consumer_backend': sqs_consumer_backend,
+            },
+        )
         _f.assert_called_once_with(*message.args, metadata, **message.kwargs)
 
     def test_find_by_name(self):

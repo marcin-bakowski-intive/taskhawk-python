@@ -88,10 +88,10 @@ class TestMessageMethods:
             Message(message_data).validate()
 
     @mock.patch('tests.tasks._send_email', autospec=True)
-    def test_call_task(self, mock_send_email, message):
+    def test_call_task(self, mock_send_email, message, sqs_consumer_backend):
         receipt = str(uuid.uuid4())
         message.validate()
-        message.call_task(receipt)
+        message.call_task(sqs_consumer_backend, receipt=receipt)
         mock_send_email.assert_called_once()
         assert mock_send_email.call_args[0] == tuple(message.args)
         assert funcy.project(mock_send_email.call_args[1], message.kwargs.keys()) == message.kwargs
@@ -102,6 +102,7 @@ class TestMessageMethods:
             'version': message.version,
             'receipt': receipt,
             'priority': Priority.default,
+            'consumer_backend': sqs_consumer_backend,
         }
 
     def test_equal(self, message):

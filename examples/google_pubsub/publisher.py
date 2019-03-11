@@ -1,8 +1,9 @@
 import os
+
 os.environ.setdefault("SETTINGS_MODULE", "examples.google_pubsub.user_settings")
 
-from time import time
-from .tasks import echo, echo_with_extended_visibility_timeout, echo_error
+from time import time  # noqa
+from .tasks import echo, echo_with_extended_visibility_timeout, echo_error  # noqa
 
 
 def main():

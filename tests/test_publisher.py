@@ -1,27 +1,30 @@
-from decimal import Decimal
 import json
+from decimal import Decimal
 from unittest import mock
-import uuid
 
 import pytest
 
-from taskhawk import Priority
+from taskhawk import Priority, publish
+from taskhawk.backends.base import get_publisher_backend, TaskhawkBaseBackend
+from taskhawk.backends.google_cloud import GooglePubSubPublisherBackend
+from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
 from taskhawk.models import Message
-from taskhawk.publisher import (
-    publish,
-    _get_sns_topic,
-    _convert_to_json,
-    _publish_over_sns,
-    _publish_over_sqs,
-    _get_sns_client,
-)
 
 
-@mock.patch('taskhawk.publisher.boto3.client', autospec=True)
-def test_get_sns_client(mock_boto3_client):
-    client = _get_sns_client()
-    mock_boto3_client.assert_called_once_with(
+@pytest.fixture()
+def gcloud_publisher_backend():
+    with mock.patch("taskhawk.backends.google_cloud.pubsub_v1"):
+        yield GooglePubSubPublisherBackend()
+
+
+@mock.patch('taskhawk.backends.aws.boto3.client', autospec=True)
+def test_get_sns_client(mock_boto3_resource):
+    settings.TASKHAWK_PUBLISHER_BACKEND = 'taskhawk.backends.aws.AwsSnsPublisherBackend'
+    settings.AWS_REGION = 'us-west-1'
+    sns_backend = get_publisher_backend()
+
+    mock_boto3_resource.assert_called_once_with(
         'sns',
         region_name=settings.AWS_REGION,
         aws_access_key_id=settings.AWS_ACCESS_KEY,
@@ -30,7 +33,7 @@ def test_get_sns_client(mock_boto3_client):
         endpoint_url=settings.AWS_ENDPOINT_SNS,
         config=mock.ANY,
     )
-    assert client == mock_boto3_client.return_value
+    assert sns_backend.sns_client == mock_boto3_resource.return_value
 
 
 @pytest.mark.parametrize(
@@ -42,86 +45,97 @@ def test_get_sns_client(mock_boto3_client):
         (Priority.bulk, '-bulk'),
     ],
 )
-def test__get_sns_topic(priority, suffix):
+def test__get_sns_topic(priority, suffix, sns_publisher_backend):
     assert (
-        _get_sns_topic(priority) == f'arn:aws:sns:{settings.AWS_REGION}:{settings.AWS_ACCOUNT_ID}:taskhawk-'
+        sns_publisher_backend._get_sns_topic(priority)
+        == f'arn:aws:sns:{settings.AWS_REGION}:{settings.AWS_ACCOUNT_ID}:taskhawk-'
         f'{settings.TASKHAWK_QUEUE.lower()}{suffix}'
     )
 
 
-@mock.patch('taskhawk.publisher._get_sns_client', autospec=True)
-def test__publish_over_sns(mock_get_sns_client, message):
+def test__publish_over_sns(message_data, sns_publisher_backend):
     priority = Priority.high
-    topic = _get_sns_topic(priority)
-    message_json = _convert_to_json(message.as_dict())
+    message_data['metadata']['priority'] = priority.name
+    message = Message(message_data)
+    sns_publisher_backend.sns_client = mock.MagicMock()
 
-    _publish_over_sns(topic, message_json, message.headers)
+    sns_publisher_backend.publish(message)
 
-    mock_get_sns_client.assert_called_once_with()
-    mock_get_sns_client.return_value.publish.assert_called_once_with(
-        TopicArn=topic,
-        Message=message_json,
+    sns_publisher_backend.sns_client.publish.assert_called_once_with(
+        TopicArn=sns_publisher_backend._get_sns_topic(priority),
+        Message=sns_publisher_backend.message_payload(message_data),
         MessageAttributes={k: {'DataType': 'String', 'StringValue': str(v)} for k, v in message.headers.items()},
     )
 
 
-def test__publish_over_sqs(message):
-    message_json = _convert_to_json(message.as_dict())
+def test__publish_over_sqs(message, sqs_publisher_backend):
     queue = mock.MagicMock()
+    sqs_publisher_backend.sqs.get_queue_by_name = mock.MagicMock(return_value=queue)
 
-    _publish_over_sqs(queue, message_json, message.headers)
+    sqs_publisher_backend.publish(message)
 
     queue.send_message.assert_called_once_with(
-        MessageBody=message_json,
+        MessageBody=sqs_publisher_backend.message_payload(message.as_dict()),
         MessageAttributes={k: {'DataType': 'String', 'StringValue': str(v)} for k, v in message.headers.items()},
+    )
+
+
+def test__publish_over_google_pubsub(message, gcloud_publisher_backend):
+    publish_topic = 'dummy_topic'
+    queue_name = get_queue_name(message.priority)
+    gcloud_publisher_backend.publisher.topic_path = mock.MagicMock(return_value=publish_topic)
+
+    gcloud_publisher_backend.publish(message)
+
+    gcloud_publisher_backend.publisher.topic_path.assert_called_once_with(settings.GOOGLE_PUBSUB_PROJECT_ID, queue_name)
+    gcloud_publisher_backend.publisher.publish.assert_called_once_with(
+        publish_topic,
+        data=gcloud_publisher_backend.message_payload(message.as_dict()).encode("utf-8"),
+        **message.headers,
     )
 
 
 @pytest.mark.parametrize('value', [1469056316326, 1469056316326.123])
 def test__convert_to_json_decimal(value, message_data):
+    backend = TaskhawkBaseBackend()
     message_data['args'][0] = Decimal(value)
     message = Message(message_data)
-    assert json.loads(_convert_to_json(message.as_dict()))['args'][0] == float(message.args[0])
+    assert json.loads(backend.message_payload(message.as_dict()))['args'][0] == float(message.args[0])
 
 
 def test__convert_to_json_non_serializable(message_data):
+    backend = TaskhawkBaseBackend()
     message_data['args'][0] = object()
     message = Message(message_data)
     with pytest.raises(TypeError):
-        _convert_to_json(message.as_dict())
+        backend.message_payload(message.as_dict())
 
 
-@mock.patch('taskhawk.publisher.get_queue_name', autospec=True)
-@mock.patch('taskhawk.publisher.get_queue', autospec=True)
-@mock.patch('taskhawk.publisher._convert_to_json', autospec=True)
-@mock.patch('taskhawk.publisher._publish_over_sqs', autospec=True)
-def test_publish_non_lambda(mock_publish_over_sqs, mock_convert_to_json, mock_get_queue, mock_get_queue_name, message):
+def test_publish_non_lambda(sqs_publisher_backend, message):
     assert settings.TASKHAWK_QUEUE
-    sqs_id = str(uuid.uuid4())
     message.priority = Priority.high
-    mock_publish_over_sqs.return_value = {'MessageId': sqs_id}
+    queue = mock.MagicMock()
+    queue_name = get_queue_name(message.priority)
+    sqs_publisher_backend.sqs.get_queue_by_name = mock.MagicMock(return_value=queue)
+    # mock_publish_over_sqs.return_value = {'MessageId': sqs_id}
 
-    publish(message)
+    publish(message, sqs_publisher_backend)
 
-    mock_get_queue_name.assert_called_once_with(message.priority)
-    mock_get_queue.assert_called_once_with(mock_get_queue_name.return_value)
-    mock_publish_over_sqs.assert_called_once_with(
-        mock_get_queue.return_value, mock_convert_to_json.return_value, message.headers
+    message_attributes = {k: {'DataType': 'String', 'StringValue': str(v)} for k, v in message.headers.items()}
+    sqs_publisher_backend.sqs.get_queue_by_name.assert_called_once_with(QueueName=queue_name)
+    queue.send_message.assert_called_once_with(
+        MessageBody=sqs_publisher_backend.message_payload(message.as_dict()), MessageAttributes=message_attributes
     )
-    mock_convert_to_json.assert_called_once_with(message.as_dict())
 
 
-@mock.patch('taskhawk.publisher._convert_to_json', autospec=True)
-@mock.patch('taskhawk.publisher._publish_over_sns', autospec=True)
-def test_publish_lambda(mock_publish_over_sns, mock_convert_to_json, message, settings):
-    settings.IS_LAMBDA_APP = True
-
-    sns_id = str(uuid.uuid4())
+def test_publish_lambda(sns_publisher_backend, message):
     message.priority = Priority.high
-    mock_publish_over_sns.return_value = {'MessageId': sns_id}
+    sns_publisher_backend.sns_client = mock.MagicMock()
 
-    publish(message)
+    publish(message, sns_publisher_backend)
 
-    topic = _get_sns_topic(message.priority)
-    mock_publish_over_sns.assert_called_once_with(topic, mock_convert_to_json.return_value, message.headers)
-    mock_convert_to_json.assert_called_once_with(message.as_dict())
+    sns_publisher_backend.sns_client.publish.assert_called_once_with(
+        TopicArn=sns_publisher_backend._get_sns_topic(message.priority),
+        Message=sns_publisher_backend.message_payload(message.as_dict()),
+        MessageAttributes={k: {'DataType': 'String', 'StringValue': str(v)} for k, v in message.headers.items()},
+    )

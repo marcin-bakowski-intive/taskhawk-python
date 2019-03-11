@@ -5,5 +5,7 @@ AWS_SECRET_KEY = "DUMMY_SECRET"
 
 AWS_CONNECT_TIMEOUT_S = 5
 AWS_READ_TIMEOUT_S = 5
+TASKHAWK_PUBLISHER_BACKEND = 'taskhawk.backends.aws.AwsSQSPublisherBackend'
+TASKHAWK_CONSUMER_BACKEND = 'taskhawk.backends.aws.AwsSQSConsumerBackend'
 
 TASKHAWK_QUEUE = 'DEV-RTEP'

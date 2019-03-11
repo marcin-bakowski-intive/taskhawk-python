@@ -1,40 +1,26 @@
 import random
-from unittest import mock
 import uuid
+from unittest import mock
 
-from taskhawk.conf import settings
+from taskhawk import extend_visibility_timeout
+from taskhawk.backends.utils import get_queue_name
 from taskhawk.models import Priority
-from taskhawk.utils import extend_visibility_timeout, _get_sqs_client
 
 
-@mock.patch('taskhawk.utils.boto3.client')
-def test_get_sqs_client(mock_boto3_client):
-    client = _get_sqs_client()
-    mock_boto3_client.assert_called_once_with(
-        'sqs',
-        region_name=settings.AWS_REGION,
-        aws_access_key_id=settings.AWS_ACCESS_KEY,
-        aws_secret_access_key=settings.AWS_SECRET_KEY,
-        aws_session_token=settings.AWS_SESSION_TOKEN,
-        endpoint_url=settings.AWS_ENDPOINT_SNS,
-    )
-    assert client == mock_boto3_client.return_value
-
-
-@mock.patch('taskhawk.utils._get_sqs_client')
-@mock.patch('taskhawk.utils.get_queue_name')
-def test_extend_visibility_timeout(mock_get_queue_name, mock_get_sqs_client):
+@mock.patch("taskhawk.utils.AwsSQSConsumerBackend")
+def test_extend_visibility_timeout(backend_mock, sqs_consumer_backend):
+    backend_mock.return_value = sqs_consumer_backend
     priority = Priority.high
     receipt = str(uuid.uuid4())
     visibility_timeout_s = random.randint(0, 1000)
+    queue_name = get_queue_name(priority)
+    queue_url = "dummy_queue_url"
+    sqs_consumer_backend.sqs.get_queue_url = mock.MagicMock(return_value={"QueueUrl": queue_url})
+    sqs_consumer_backend.sqs.change_message_visibility = mock.MagicMock()
 
     extend_visibility_timeout(priority, receipt, visibility_timeout_s)
 
-    mock_get_queue_name.assert_called_once_with(priority)
-    mock_get_sqs_client.assert_called_once_with()
-    mock_get_sqs_client.return_value.get_queue_url.assert_called_once_with(QueueName=mock_get_queue_name.return_value)
-    mock_get_sqs_client.return_value.change_message_visibility.assert_called_once_with(
-        QueueUrl=mock_get_sqs_client.return_value.get_queue_url.return_value['QueueUrl'],
-        ReceiptHandle=receipt,
-        VisibilityTimeout=visibility_timeout_s,
+    sqs_consumer_backend.sqs.get_queue_url.assert_called_once_with(QueueName=queue_name)
+    sqs_consumer_backend.sqs.change_message_visibility.assert_called_once_with(
+        QueueUrl=queue_url, ReceiptHandle=receipt, VisibilityTimeout=visibility_timeout_s
     )

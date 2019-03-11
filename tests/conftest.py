@@ -1,14 +1,18 @@
 import logging
 import time
 import uuid
+from unittest import mock
 
 import pytest
+from moto import mock_sqs, mock_sns
 
 from taskhawk import Message
 import taskhawk.conf
 
 # initialize tasks
 import tests.tasks  # noqa
+from taskhawk.backends import aws
+from taskhawk.backends.base import TaskhawkBaseBackend
 
 
 def pytest_configure():
@@ -52,3 +56,40 @@ def _message_data():
 @pytest.fixture()
 def message(message_data):
     return Message(message_data)
+
+
+@pytest.fixture()
+def sqs_publisher_backend(settings):
+    settings.AWS_REGION = 'us-west-1'
+    with mock_sqs():
+        yield aws.AwsSQSPublisherBackend()
+
+
+@pytest.fixture()
+def sns_publisher_backend(settings):
+    settings.AWS_REGION = 'us-west-1'
+    with mock_sns():
+        yield aws.AwsSnsPublisherBackend()
+
+
+@pytest.fixture()
+def sqs_consumer_backend(settings):
+    settings.AWS_REGION = 'us-west-1'
+    with mock_sqs():
+        yield aws.AwsSQSConsumerBackend()
+
+
+@pytest.fixture()
+def sns_consumer_backend(settings):
+    settings.AWS_REGION = 'us-west-1'
+    with mock_sns():
+        yield aws.AwsSnsConsumerBackend()
+
+
+@pytest.fixture(
+    params=["taskhawk.backends.aws.AwsSQSConsumerBackend", "taskhawk.backends.google_cloud.GooglePubSubConsumerBackend"]
+)
+def consumer_backend(request, settings):
+    settings.AWS_REGION = 'us-west-1'
+    with mock_sqs(), mock.patch("taskhawk.backends.google_cloud.pubsub_v1"):
+        yield TaskhawkBaseBackend.build(request.param)
