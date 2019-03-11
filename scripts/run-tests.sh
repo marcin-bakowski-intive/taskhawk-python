@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 options="-v -s --strict --cov=taskhawk"
 

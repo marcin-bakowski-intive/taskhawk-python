@@ -1,25 +1,34 @@
 alabaster==0.7.12         # via sphinx
 appdirs==1.4.3            # via black
 arrow==0.13.1
+asn1crypto==0.24.0        # via cryptography
 atomicwrites==1.3.0       # via pytest
 attrs==19.1.0             # via black, pytest
+aws-xray-sdk==0.95        # via moto
 babel==2.6.0              # via sphinx
 backcall==0.1.0           # via ipython
 black==18.9b0
-boto3==1.9.107
-botocore==1.12.107        # via boto3, s3transfer
+boto3==1.9.111            # via moto
+boto==2.49.0              # via moto
+botocore==1.12.111        # via boto3, moto, s3transfer
 cachetools==3.1.0         # via google-auth
-certifi==2018.11.29       # via requests
+certifi==2019.3.9         # via requests
+cffi==1.12.2              # via cryptography
 chardet==3.0.4            # via requests
 click==7.0                # via black, pip-tools
-coverage==4.5.2           # via coveralls, pytest-cov
+coverage==4.5.3           # via coveralls, pytest-cov
 coveralls==1.6.0
+cryptography==2.6.1       # via moto
 decorator==4.3.2          # via ipython, traitlets
+docker-pycreds==0.4.0     # via docker
+docker==3.7.0             # via moto
 docopt==0.6.2             # via coveralls
 docutils==0.14            # via botocore, sphinx
+ecdsa==0.13               # via python-jose
 entrypoints==0.3          # via flake8
 flake8==3.7.7
 funcy==1.11
+future==0.17.1            # via python-jose
 google-api-core[grpc]==1.8.0  # via google-cloud-pubsub
 google-auth==1.6.3        # via google-api-core
 google-cloud-pubsub==0.39.1
@@ -32,15 +41,20 @@ ipdb==0.11
 ipython-genutils==0.2.0   # via traitlets
 ipython==7.3.0            # via ipdb
 jedi==0.13.3              # via ipython
-jinja2==2.10              # via sphinx
+jinja2==2.10              # via moto, sphinx
 jmespath==0.9.4           # via boto3, botocore
+jsondiff==1.1.1           # via moto
+jsonpickle==1.1           # via aws-xray-sdk
 markupsafe==1.1.1         # via jinja2
 mccabe==0.6.1             # via flake8
+mock==2.0.0               # via moto
 more-itertools==6.0.0     # via pytest
+moto==1.3.7
 mypy-extensions==0.4.1    # via mypy
 mypy==0.670
 packaging==19.0           # via sphinx
 parso==0.3.4              # via jedi
+pbr==5.1.3                # via mock
 pexpect==4.6.0            # via ipython
 pickleshare==0.7.5        # via ipython
 pip-tools==3.4.0
@@ -49,27 +63,38 @@ prompt-toolkit==2.0.9     # via ipython
 protobuf==3.7.0           # via google-api-core, googleapis-common-protos
 ptyprocess==0.6.0         # via pexpect
 py==1.8.0                 # via pytest
+pyaml==18.11.0            # via moto
 pyasn1-modules==0.2.4     # via google-auth
 pyasn1==0.4.5             # via pyasn1-modules, rsa
 pycodestyle==2.5.0        # via flake8
+pycparser==2.19           # via cffi
+pycryptodome==3.7.3       # via python-jose
 pyflakes==2.1.1           # via flake8
 pygments==2.3.1           # via ipython, sphinx
 pyparsing==2.3.1          # via packaging
 pytest-cov==2.6.1
 pytest-env==0.6.2
 pytest==4.3.0             # via pytest-cov, pytest-env
-python-dateutil==2.8.0    # via arrow, botocore
-pytz==2018.9              # via babel, google-api-core
-requests==2.21.0          # via coveralls, google-api-core, sphinx
+python-dateutil==2.8.0    # via arrow, botocore, moto
+python-jose==2.0.2        # via moto
+pytz==2018.9              # via babel, google-api-core, moto
+pyyaml==3.13              # via pyaml
+redis==3.2.0
+requests==2.21.0          # via aws-xray-sdk, coveralls, docker, google-api-core, moto, responses, sphinx
+responses==0.10.5         # via moto
 retrying==1.3.3
 rsa==4.0                  # via google-auth
 s3transfer==0.2.0         # via boto3
-six==1.12.0               # via google-api-core, google-auth, grpcio, packaging, pip-tools, prompt-toolkit, protobuf, pytest, python-dateutil, retrying, sphinx, traitlets
+six==1.12.0               # via cryptography, docker, docker-pycreds, google-api-core, google-auth, grpcio, mock, moto, packaging, pip-tools, prompt-toolkit, protobuf, pytest, python-dateutil, python-jose, responses, retrying, sphinx, traitlets, websocket-client
 snowballstemmer==1.2.1    # via sphinx
-sphinx==1.8.4
+sphinx==1.8.5
 sphinxcontrib-websupport==1.1.0  # via sphinx
 toml==0.10.0              # via black
 traitlets==4.3.2          # via ipython
 typed-ast==1.3.1          # via mypy
 urllib3==1.24.1           # via botocore, requests
 wcwidth==0.1.7            # via prompt-toolkit
+websocket-client==0.55.0  # via docker
+werkzeug==0.14.1          # via moto
+wrapt==1.11.1             # via aws-xray-sdk
+xmltodict==0.12.0         # via moto
