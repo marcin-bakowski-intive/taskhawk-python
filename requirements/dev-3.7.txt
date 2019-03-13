@@ -8,9 +8,9 @@ aws-xray-sdk==0.95        # via moto
 babel==2.6.0              # via sphinx
 backcall==0.1.0           # via ipython
 black==18.9b0
-boto3==1.9.111            # via moto
+boto3==1.9.113            # via moto
 boto==2.49.0              # via moto
-botocore==1.12.111        # via boto3, moto, s3transfer
+botocore==1.12.113        # via boto3, moto, s3transfer
 cachetools==3.1.0         # via google-auth
 certifi==2019.3.9         # via requests
 cffi==1.12.2              # via cryptography
@@ -57,7 +57,7 @@ parso==0.3.4              # via jedi
 pbr==5.1.3                # via mock
 pexpect==4.6.0            # via ipython
 pickleshare==0.7.5        # via ipython
-pip-tools==3.4.0
+pip-tools==3.5.0
 pluggy==0.9.0             # via pytest
 prompt-toolkit==2.0.9     # via ipython
 protobuf==3.7.0           # via google-api-core, googleapis-common-protos
@@ -74,7 +74,7 @@ pygments==2.3.1           # via ipython, sphinx
 pyparsing==2.3.1          # via packaging
 pytest-cov==2.6.1
 pytest-env==0.6.2
-pytest==4.3.0             # via pytest-cov, pytest-env
+pytest==4.3.1             # via pytest-cov, pytest-env
 python-dateutil==2.8.0    # via arrow, botocore, moto
 python-jose==2.0.2        # via moto
 pytz==2018.9              # via babel, google-api-core, moto

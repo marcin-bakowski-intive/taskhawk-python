@@ -87,9 +87,9 @@ def sns_consumer_backend(settings):
 
 
 @pytest.fixture(
-    params=["taskhawk.backends.aws.AwsSQSConsumerBackend", "taskhawk.backends.google_cloud.GooglePubSubConsumerBackend"]
+    params=["taskhawk.backends.aws.AwsSQSConsumerBackend", "taskhawk.backends.gcp.GooglePubSubConsumerBackend"]
 )
 def consumer_backend(request, settings):
     settings.AWS_REGION = 'us-west-1'
-    with mock_sqs(), mock.patch("taskhawk.backends.google_cloud.pubsub_v1"):
+    with mock_sqs(), mock.patch("taskhawk.backends.gcp.pubsub_v1"):
         yield TaskhawkBaseBackend.build(request.param)

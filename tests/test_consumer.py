@@ -7,7 +7,7 @@ import pytest
 from taskhawk import process_messages_for_lambda_consumer, listen_for_messages
 from taskhawk.backends import base
 from taskhawk.backends.base import get_consumer_backend
-from taskhawk.backends.google_cloud import GooglePubSubConsumerBackend
+from taskhawk.backends.gcp import GooglePubSubConsumerBackend
 from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
 from taskhawk.exceptions import RetryException, ValidationError, LoggingException, IgnoreException
@@ -315,8 +315,8 @@ class TestListenForMessages:
 class TestGoogleConsumerDLQ:
     def google_consumer_backend(self, max_retries):
         settings.GOOGLE_MESSAGE_MAX_RETRIES = max_retries
-        settings.GOOGLE_MESSAGE_RETRY_STATE_BACKEND = "taskhawk.backends.google_cloud.MessageRetryStateLocMem"
-        with mock.patch("taskhawk.backends.google_cloud.pubsub_v1"):
+        settings.GOOGLE_MESSAGE_RETRY_STATE_BACKEND = "taskhawk.backends.gcp.MessageRetryStateLocMem"
+        with mock.patch("taskhawk.backends.gcp.pubsub_v1"):
             return GooglePubSubConsumerBackend()
 
     def setup_consumer_backend(self, consumer_backend, message):

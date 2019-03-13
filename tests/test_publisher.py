@@ -6,7 +6,7 @@ import pytest
 
 from taskhawk import Priority, publish
 from taskhawk.backends.base import get_publisher_backend, TaskhawkBaseBackend
-from taskhawk.backends.google_cloud import GooglePubSubPublisherBackend
+from taskhawk.backends.gcp import GooglePubSubPublisherBackend
 from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
 from taskhawk.models import Message
@@ -14,7 +14,7 @@ from taskhawk.models import Message
 
 @pytest.fixture()
 def gcloud_publisher_backend():
-    with mock.patch("taskhawk.backends.google_cloud.pubsub_v1"):
+    with mock.patch("taskhawk.backends.gcp.pubsub_v1"):
         yield GooglePubSubPublisherBackend()
 
 

@@ -2,7 +2,6 @@ import logging
 from collections import Counter
 import typing
 
-import redis
 from google.api_core.exceptions import NotFound, DeadlineExceeded
 from google.cloud import pubsub_v1
 from google.cloud.pubsub_v1.proto.pubsub_pb2 import ReceivedMessage
@@ -166,6 +165,8 @@ class MessageRetryStateLocMem(MessageRetryStateBackend):
 
 class MessageRetryStateRedis(MessageRetryStateBackend):
     def __init__(self) -> None:
+        import redis
+
         super().__init__()
         self.client = redis.from_url(settings.GOOGLE_MESSAGE_RETRY_STATE_REDIS_URL)
 
