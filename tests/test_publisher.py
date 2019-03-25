@@ -70,7 +70,7 @@ def test__publish_over_sns(message_data, sns_publisher_backend):
 
 def test__publish_over_sqs(message, sqs_publisher_backend):
     queue = mock.MagicMock()
-    sqs_publisher_backend.sqs.get_queue_by_name = mock.MagicMock(return_value=queue)
+    sqs_publisher_backend.sqs._get_queue_by_name = mock.MagicMock(return_value=queue)
 
     sqs_publisher_backend.publish(message)
 
@@ -116,13 +116,13 @@ def test_publish_non_lambda(sqs_publisher_backend, message):
     message.priority = Priority.high
     queue = mock.MagicMock()
     queue_name = get_queue_name(message.priority)
-    sqs_publisher_backend.sqs.get_queue_by_name = mock.MagicMock(return_value=queue)
+    sqs_publisher_backend.sqs._get_queue_by_name = mock.MagicMock(return_value=queue)
     # mock_publish_over_sqs.return_value = {'MessageId': sqs_id}
 
     publish(message, sqs_publisher_backend)
 
     message_attributes = {k: {'DataType': 'String', 'StringValue': str(v)} for k, v in message.headers.items()}
-    sqs_publisher_backend.sqs.get_queue_by_name.assert_called_once_with(QueueName=queue_name)
+    sqs_publisher_backend.sqs._get_queue_by_name.assert_called_once_with(QueueName=queue_name)
     queue.send_message.assert_called_once_with(
         MessageBody=sqs_publisher_backend.message_payload(message.as_dict()), MessageAttributes=message_attributes
     )

@@ -6,36 +6,11 @@ import pytest
 
 from taskhawk import process_messages_for_lambda_consumer, listen_for_messages
 from taskhawk.backends import base
-from taskhawk.backends.base import get_consumer_backend
 from taskhawk.backends.gcp import GooglePubSubConsumerBackend
 from taskhawk.backends.utils import get_queue_name
 from taskhawk.conf import settings
 from taskhawk.exceptions import RetryException, ValidationError, LoggingException, IgnoreException
 from taskhawk.models import Priority
-
-
-@mock.patch('taskhawk.backends.aws.boto3.resource', autospec=True)
-def test__get_sqs_resource(mock_boto3_resource):
-    sqs_backend = get_consumer_backend()
-    mock_boto3_resource.assert_called_once_with(
-        'sqs',
-        region_name=settings.AWS_REGION,
-        aws_access_key_id=settings.AWS_ACCESS_KEY,
-        aws_secret_access_key=settings.AWS_SECRET_KEY,
-        aws_session_token=settings.AWS_SESSION_TOKEN,
-        endpoint_url=settings.AWS_ENDPOINT_SQS,
-    )
-    assert sqs_backend.sqs == mock_boto3_resource.return_value
-
-
-@mock.patch('taskhawk.backends.aws.boto3.resource', autospec=True)
-def test_get_queue(mock_get_sqs_resource):
-    queue_name = 'foo'
-    mock_get_sqs_resource.return_value.get_queue_by_name.return_value = 'foo-bar'
-    sqs_backend = get_consumer_backend()
-
-    sqs_backend.get_queue_by_name(queue_name)
-    mock_get_sqs_resource.return_value.get_queue_by_name.assert_called_once_with(QueueName=queue_name)
 
 
 @mock.patch('taskhawk.backends.base.Message.call_task', autospec=True)

@@ -93,7 +93,13 @@ class TaskhawkConsumerBaseBackend(TaskhawkBaseBackend):
         """
         Extends visibility timeout of a message on a given priority queue for long running tasks.
         """
-        logger.debug("Nothing to do. Backend must provide its own extend_visibility_timeout() implementation")
+        raise NotImplementedError
+
+    def requeue_dead_letter(self, priority: Priority, num_messages: int = 10, visibility_timeout: int = None) -> None:
+        """
+        Re-queues everything in the Taskhawk DLQ back into the Taskhawk queue.
+        """
+        raise NotImplementedError
 
     def pull_messages(self, queue_name: str, num_messages: int = 1, visibility_timeout: int = None):
         raise NotImplementedError

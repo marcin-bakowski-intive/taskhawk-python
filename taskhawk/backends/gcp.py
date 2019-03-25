@@ -63,7 +63,7 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
     def pull_messages(
         self, queue_name: str, num_messages: int = 1, visibility_timeout: int = None
     ) -> typing.List[ReceivedMessage]:
-        subscription_path = self._get_subsciption_path(queue_name)
+        subscription_path = self._get_subscription_path(queue_name)
 
         # TODO: POC only, remove subscription auto-creation code
         self._ensure_subscription_exists(queue_name, subscription_path)
@@ -84,7 +84,7 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
                 raise
 
     def delete_message(self, queue_message: ReceivedMessage, **kwargs) -> None:
-        subscription_path = self._get_subsciption_path(kwargs['queue_name'])
+        subscription_path = self._get_subscription_path(kwargs['queue_name'])
         self.subscriber.acknowledge(subscription_path, [queue_message.ack_id])
 
     @staticmethod
@@ -99,8 +99,54 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
             raise ValueError("Invalid visibility_timeout_s")
         ack_id = metadata['ack_id']
         queue_name = get_queue_name(priority)
-        subscription = self._get_subsciption_path(queue_name)
+        subscription = self._get_subscription_path(queue_name)
         self.subscriber.modify_ack_deadline(subscription, [ack_id], visibility_timeout_s)
+
+    def requeue_dead_letter(self, priority: Priority, num_messages: int = 10, visibility_timeout: int = None) -> None:
+        """
+        Re-queues everything in the Taskhawk DLQ back into the Taskhawk queue.
+
+        :param priority: The priority queue to listen to
+        :param num_messages: Maximum number of messages to fetch in one call. Defaults to 10.
+        :param visibility_timeout: The number of seconds the message should remain invisible to other queue readers.
+        Defaults to None, which is queue default
+        """
+        queue_name = get_queue_name(priority)
+        topic_path = self.publisher.publisher.topic_path(settings.GOOGLE_PUBSUB_PROJECT_ID, queue_name)
+        dlq_queue_name = self._dlq_queue_name(queue_name)
+        dlq_subscription_path = self._get_subscription_path(dlq_queue_name)
+
+        logging.info("Re-queueing messages from {} to {}".format(dlq_subscription_path, topic_path))
+        while True:
+            queue_messages = self.pull_messages(
+                dlq_queue_name, num_messages=num_messages, visibility_timeout=visibility_timeout
+            )
+            if not queue_messages:
+                break
+
+            logging.info("got {} messages from dlq".format(len(queue_messages)))
+            for queue_message in queue_messages:
+                try:
+                    if visibility_timeout:
+                        self.subscriber.modify_ack_deadline(
+                            dlq_subscription_path, [queue_message.ack_id], visibility_timeout
+                        )
+
+                    message = self._build_message(queue_message.message.data)
+                    payload = self.message_payload(message.as_dict())
+                    self.publisher.publish_to_topic(topic_path, payload.encode("utf-8"), message.headers)
+                    logger.debug(
+                        'Re-queue message from DLQ {} to {}'.format(dlq_subscription_path, topic_path),
+                        extra={'message_body': payload},
+                    )
+
+                    self.delete_message(queue_message, queue_name=dlq_queue_name)
+                except Exception:
+                    logger.exception(
+                        'Exception in requeue message from {} to {}'.format(dlq_subscription_path, topic_path)
+                    )
+
+            logging.info("Re-queued {} messages".format(len(queue_messages)))
 
     def _ensure_subscription_exists(self, queue_name: str, subscription_path: str) -> None:
         topic_path = self.subscriber.topic_path(settings.GOOGLE_PUBSUB_PROJECT_ID, queue_name)
@@ -109,7 +155,7 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
         except NotFound:
             self.subscriber.create_subscription(subscription_path, topic_path)
 
-    def _get_subsciption_path(self, queue_name: str) -> str:
+    def _get_subscription_path(self, queue_name: str) -> str:
         return self.subscriber.subscription_path(settings.GOOGLE_PUBSUB_PROJECT_ID, queue_name)
 
     def _can_reprocess_message(self, queue_message: ReceivedMessage, queue_name: str) -> bool:
@@ -124,10 +170,14 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
             self._move_message_to_dlq(message, queue_name)
         return False
 
+    @staticmethod
+    def _dlq_queue_name(queue_name: str):
+        return f"{queue_name}-DLQ"
+
     def _move_message_to_dlq(self, message: Message, queue_name: str) -> None:
-        dlq_queue_name = f"{queue_name}-DLQ"
+        dlq_queue_name = self._dlq_queue_name(queue_name)
         dlq_topic_path = self.publisher.publisher.topic_path(settings.GOOGLE_PUBSUB_PROJECT_ID, dlq_queue_name)
-        dlq_subscription_path = self._get_subsciption_path(dlq_queue_name)
+        dlq_subscription_path = self._get_subscription_path(dlq_queue_name)
 
         self.publisher.ensure_topic_exists(dlq_topic_path)
         self._ensure_subscription_exists(dlq_queue_name, dlq_subscription_path)

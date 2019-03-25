@@ -1,4 +1,4 @@
-from taskhawk.backends.aws import AwsSQSConsumerBackend
+from taskhawk.backends.base import get_consumer_backend
 from taskhawk.models import Priority
 
 
@@ -7,5 +7,5 @@ def extend_visibility_timeout(priority: Priority, receipt: str, visibility_timeo
     Extends visibility timeout of a message on a given priority queue for long running tasks in SQS queues.
     """
 
-    sqs_consumer_backend = AwsSQSConsumerBackend()
-    sqs_consumer_backend.extend_visibility_timeout(priority, visibility_timeout_s, receipt=receipt)
+    consumer_backend = get_consumer_backend()
+    consumer_backend.extend_visibility_timeout(priority, visibility_timeout_s, receipt=receipt)
