@@ -58,38 +58,27 @@ def message(message_data):
     return Message(message_data)
 
 
-@pytest.fixture()
-def sqs_publisher_backend(settings):
+@pytest.fixture
+def mock_boto3():
     settings.AWS_REGION = 'us-west-1'
-    with mock_sqs():
-        yield aws.AwsSQSPublisherBackend()
-
-
-@pytest.fixture()
-def sns_publisher_backend(settings):
-    settings.AWS_REGION = 'us-west-1'
-    with mock_sns():
-        yield aws.AwsSnsPublisherBackend()
+    with mock_sqs(), mock_sns(), mock.patch("taskhawk.backends.aws.boto3", autospec=True) as boto3_mock:
+        yield boto3_mock
 
 
 @pytest.fixture()
-def sqs_consumer_backend(settings):
-    settings.AWS_REGION = 'us-west-1'
-    with mock_sqs():
-        yield aws.AwsSQSConsumerBackend()
+def sqs_consumer_backend(mock_boto3):
+    yield aws.AwsSQSConsumerBackend()
 
 
-@pytest.fixture()
-def sns_consumer_backend(settings):
-    settings.AWS_REGION = 'us-west-1'
-    with mock_sns():
-        yield aws.AwsSnsConsumerBackend()
+@pytest.fixture
+def mock_pubsub_v1():
+    with mock.patch("taskhawk.backends.gcp.pubsub_v1", autospec=True) as pubsub_v1_mock:
+        yield pubsub_v1_mock
 
 
 @pytest.fixture(
     params=["taskhawk.backends.aws.AwsSQSConsumerBackend", "taskhawk.backends.gcp.GooglePubSubConsumerBackend"]
 )
-def consumer_backend(request, settings):
-    settings.AWS_REGION = 'us-west-1'
-    with mock_sqs(), mock.patch("taskhawk.backends.gcp.pubsub_v1"):
+def consumer_backend(request, mock_boto3):
+    with mock.patch("taskhawk.backends.gcp.pubsub_v1"):
         yield TaskhawkBaseBackend.build(request.param)

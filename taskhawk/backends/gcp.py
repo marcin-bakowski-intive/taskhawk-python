@@ -1,6 +1,6 @@
 import logging
-from collections import Counter
 import typing
+from collections import Counter
 
 from google.api_core.exceptions import NotFound, DeadlineExceeded
 from google.cloud import pubsub_v1
@@ -11,7 +11,6 @@ from taskhawk import Message, Priority
 from taskhawk.backends.base import TaskhawkPublisherBaseBackend, log_published_message, TaskhawkConsumerBaseBackend
 from taskhawk.backends.utils import get_queue_name, import_class
 from taskhawk.conf import settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +49,7 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
         self.subscriber = pubsub_v1.SubscriberClient.from_service_account_file(settings.GOOGLE_APPLICATION_CREDENTIALS)
         self.message_retry_state: typing.Optional[MessageRetryStateBackend] = None
         self._publisher: typing.Optional[ReceivedMessage] = None
+        self._subscription_paths: dict = {}
         if settings.GOOGLE_MESSAGE_RETRY_STATE_BACKEND:
             message_retry_state_cls = import_class(settings.GOOGLE_MESSAGE_RETRY_STATE_BACKEND)
             self.message_retry_state = message_retry_state_cls()
@@ -156,7 +156,11 @@ class GooglePubSubConsumerBackend(TaskhawkConsumerBaseBackend):
             self.subscriber.create_subscription(subscription_path, topic_path)
 
     def _get_subscription_path(self, queue_name: str) -> str:
-        return self.subscriber.subscription_path(settings.GOOGLE_PUBSUB_PROJECT_ID, queue_name)
+        if queue_name not in self._subscription_paths:
+            self._subscription_paths[queue_name] = self.subscriber.subscription_path(
+                settings.GOOGLE_PUBSUB_PROJECT_ID, queue_name
+            )
+        return self._subscription_paths[queue_name]
 
     def _can_reprocess_message(self, queue_message: ReceivedMessage, queue_name: str) -> bool:
         if not self.message_retry_state:

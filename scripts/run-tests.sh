@@ -14,7 +14,7 @@ mypy taskhawk
 
 python3 -bb -m pytest ${options}
 
-black --skip-string-normalization --skip-numeric-underscore-normalization --line-length=120 --check .
+black --skip-string-normalization --line-length=120 --check .
 
 flake8
 
