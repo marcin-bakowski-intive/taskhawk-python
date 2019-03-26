@@ -57,7 +57,7 @@ chaining like so:
 Consumer
 ++++++++
 
-A consumer for SQS based workers can be started as following:
+A consumer for AWS SQS/GCP PubSub based workers can be started as following:
 
 .. code:: python
 

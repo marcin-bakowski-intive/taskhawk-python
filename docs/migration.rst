@@ -35,4 +35,15 @@ If Celery workers also publish async tasks:
 #. Terminate Celery worker processes.
 
 
+v1 → v2
+~~~~~~~~~~~~
+
+Update your settings by setting consumer and publisher backends:
+
+.. code:: python
+
+    TASKHAWK_PUBLISHER_BACKEND = 'taskhawk.backends.aws.AwsSQSPublisherBackend'
+    TASKHAWK_CONSUMER_BACKEND = 'taskhawk.backends.aws.AwsSQSConsumerBackend'
+
+
 .. _taskhawk_terraform_generator: https://github.com/Automatic/taskhawk-terraform-generator

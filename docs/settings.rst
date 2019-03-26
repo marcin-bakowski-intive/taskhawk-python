@@ -4,23 +4,35 @@ Configuration
 Add appropriate configuration to the app. If not using a Django app, ensure that `SETTINGS_MODULE` is
 defined to the path of a module where all settings can be found.
 
+**TASKHAWK_PUBLISHER_BACKEND**
+
+Taskhawk publisher backend class
+
+required; string
+
+**TASKHAWK_CONSUMER_BACKEND**
+
+Taskhawk consumer backend class
+
+required; string
+
 **AWS_REGION**
 
 AWS region
 
-required; string
+required if AWS platform is used; string
 
 **AWS_ACCOUNT_ID**
 
 AWS account id
 
-required; string
+required if AWS platform is used; string
 
 **AWS_ACCESS_KEY**
 
 AWS access key
 
-required; string
+required if AWS platform is used; string
 
 **AWS_CONNECT_TIMEOUT_S**
 
@@ -52,7 +64,7 @@ optional; int; default: 2
 
 AWS secret key
 
-required; string
+required if AWS platform is used; string
 
 **AWS_SESSION_TOKEN**
 
@@ -65,6 +77,40 @@ optional; string
 Flag indicating if this is a Lambda app
 
 optional; string; default: False
+
+**GOOGLE_APPLICATION_CREDENTIALS**
+
+Path to Google application credentials json file
+
+required if Google Cloud Platform is used; string;
+
+**GOOGLE_PUBSUB_PROJECT_ID**
+
+Flag indicating if this is a Lambda app
+
+required if Google Cloud Platform is used; string;
+
+**GOOGLE_SUB_READ_TIMEOUT_S**
+
+Read from PubSub subscription timeout in seconds
+
+optional: int; default: 5,
+
+**GOOGLE_MESSAGE_RETRY_STATE_BACKEND**
+
+Class to store task's retry state
+
+optional: string
+
+**GOOGLE_MESSAGE_RETRY_STATE_REDIS_URL**
+
+required if MessageRetryStateRedis is used as task state retry backend: string
+
+**GOOGLE_MESSAGE_MAX_RETRIES**
+
+Number of task retries before moving message to dead letter queue (-DLQ)
+
+optional: int; default: 3
 
 **TASKHAWK_DEFAULT_HEADERS**
 
